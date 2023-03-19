@@ -96,6 +96,11 @@ public class NotificationChannelManager {
                     .build();
                 Uri soundUri = Uri.parse(ContentResolver.SCHEME_ANDROID_RESOURCE + "://" + context.getPackageName() + "/raw/" + sound);
                 notificationChannel.setSound(soundUri, audioAttributes);
+            } else {
+                AudioAttributes audioAttributes = new AudioAttributes.Builder()
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE).build();
+                notificationChannel.setSound(android.provider.Settings.System.DEFAULT_NOTIFICATION_URI, audioAttributes);
             }
             notificationManager.createNotificationChannel(notificationChannel);
         }

@@ -2,6 +2,7 @@ import Foundation
 import Capacitor
 import Photos
 import PhotosUI
+import Vision
 
 @objc(CAPCameraPlugin)
 public class CameraPlugin: CAPPlugin {
@@ -193,6 +194,8 @@ public class CameraPlugin: CAPPlugin {
             settings.resultType = type
         }
         settings.saveToGallery = call.getBool("saveToGallery") ?? false
+        
+        settings.shouldScanText = call.getBool("shouldScanText") ?? false
 
         // Get the new image dimensions if provided
         settings.width = CGFloat(call.getInt("width") ?? 0)
@@ -262,7 +265,7 @@ extension CameraPlugin: PHPickerViewControllerDelegate {
                 img.itemProvider.loadObject(ofClass: UIImage.self) { [weak self] (reading, _) in
                     if let image = reading as? UIImage {
                         var asset: PHAsset?
-                        if let assetId = img.assetIdentifier {
+                        if let assetId = result.assetIdentifier {
                             asset = PHAsset.fetchAssets(withLocalIdentifiers: [assetId], options: nil).firstObject
                         }
                         if let processedImage = self?.processedImage(from: image, with: asset?.imageData) {
@@ -290,8 +293,7 @@ extension CameraPlugin: PHPickerViewControllerDelegate {
                     if let assetId = result.assetIdentifier {
                         asset = PHAsset.fetchAssets(withLocalIdentifiers: [assetId], options: nil).firstObject
                     }
-                    if var processedImage = self?.processedImage(from: image, with: asset?.imageData) {
-                        processedImage.flags = .gallery
+                    if let processedImage = self?.processedImage(from: image, with: asset?.imageData) {
                         self?.returnProcessedImage(processedImage)
                         return
                     }
@@ -331,14 +333,16 @@ private extension CameraPlugin {
                 "exif": processedImage.exifData,
                 "webPath": webURL.absoluteString,
                 "format": "jpeg",
-                "saved": isSaved
+                "saved": isSaved,
+                "recognizedText": processedImage.recognizedText,
+                "recognizedTextConfidence": processedImage.recognizedTextConfidence
             ])
         } else if settings.resultType == CameraResultType.base64 {
             self.call?.resolve([
                 "base64String": jpeg.base64EncodedString(),
                 "exif": processedImage.exifData,
                 "format": "jpeg",
-                "saved": isSaved
+                "saved": isSaved,
             ])
         } else if settings.resultType == CameraResultType.dataURL {
             call?.resolve([
@@ -555,9 +559,39 @@ private extension CameraPlugin {
         result.flags = flags
         return result
     }
-
+    
+    func resize(image: UIImage, targetSize: CGSize) -> UIImage {
+            let size = image.size
+            
+            let widthRatio  = targetSize.width  / image.size.width
+            let heightRatio = targetSize.height / image.size.height
+            
+            var newSize: CGSize
+            if widthRatio > heightRatio {
+                newSize = CGSize(width: size.width * heightRatio, height: size.height * heightRatio)
+            } else {
+                newSize = CGSize(width: size.width * widthRatio,  height: size.height * widthRatio)
+            }
+            
+            let rect = CGRect(x: 0, y: 0, width: newSize.width, height: newSize.height)
+            
+            UIGraphicsBeginImageContextWithOptions(newSize, false, 0)
+            image.draw(in: rect)
+            let newImage = UIGraphicsGetImageFromCurrentImageContext()
+            UIGraphicsEndImageContext()
+            
+            return newImage!
+        }
+    
+    func scale(image: UIImage, by scale: CGFloat) -> UIImage? {
+            let size = image.size
+            let scaledSize = CGSize(width: size.width * scale, height: size.height * scale)
+            return resize(image: image, targetSize: scaledSize)
+        }
+    
+    
     func processedImage(from image: UIImage, with metadata: [String: Any]?) -> ProcessedImage {
-        var result = ProcessedImage(image: image, metadata: metadata ?? [:])
+        var result = ProcessedImage(image: image, metadata: metadata ?? [:], recognizedText: "", recognizedTextConfidence: Float(0.0))
         // resizing the image only makes sense if we have real values to which to constrain it
         if settings.shouldResize, settings.width > 0 || settings.height > 0 {
             result.image = result.image.reformat(to: CGSize(width: settings.width, height: settings.height))
@@ -567,6 +601,56 @@ private extension CameraPlugin {
             result.image = result.image.reformat()
             result.overwriteMetadataOrientation(to: 1)
         }
+                        
+        // find text in photo if possible
+        if #available(iOS 13, *) {
+            if (self.settings.shouldScanText) {
+            let img = scale(image: image, by: 0.5)
+            guard let cgImage = img?.cgImage else { return result }
+            
+            let requestHandler = VNImageRequestHandler(cgImage: cgImage)
+            
+            let request = VNRecognizeTextRequest  { request, error in
+                guard let observations = request.results as? [VNRecognizedTextObservation] else {
+                    return
+                }
+                
+                var sum  = Float(0.0)
+                for observation in observations {
+                    sum += observation.confidence
+                }
+                
+                if (observations.count > 0) {
+                    result.recognizedTextConfidence = sum/Float(observations.count)
+                    
+                                                    
+                    var observationsSorted = observations.sorted {
+                        $0.boundingBox.origin.x < $1.boundingBox.origin.x
+                    }
+                    
+                    observationsSorted.sort {
+                        $0.boundingBox.origin.y > $1.boundingBox.origin.y
+                    }
+                    
+                    let recognizedStrings = observationsSorted.compactMap { observation in
+                        // Return the string of the top VNRecognizedText instance.
+                        return observation.topCandidates(1).first?.string
+                    }
+                    
+                    result.recognizedText = recognizedStrings.joined(separator: "\n")
+                } else {
+                    result.recognizedText = "";
+                }
+            }
+
+            do {
+                try requestHandler.perform([request])
+            } catch {
+                print("Unable to perform the requests: \(error).")
+            }
+        }
+    }
+        
         return result
     }
 }

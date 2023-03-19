@@ -15,6 +15,7 @@ public class CameraSettings {
     private int width = 0;
     private int height = 0;
     private CameraSource source = CameraSource.PROMPT;
+    private boolean shouldScanText = false;
 
     public CameraResultType getResultType() {
         return resultType;
@@ -46,6 +47,12 @@ public class CameraSettings {
 
     public void setShouldCorrectOrientation(boolean shouldCorrectOrientation) {
         this.shouldCorrectOrientation = shouldCorrectOrientation;
+    }
+
+    public boolean isShouldScanText() { return shouldScanText; }
+
+    public void setShouldScanText(boolean shouldScanText) {
+        this.shouldScanText = shouldScanText;
     }
 
     public boolean isSaveToGallery() {

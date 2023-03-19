@@ -46,6 +46,7 @@ public struct CameraSettings {
     var shouldCorrectOrientation = true
     var saveToGallery = false
     var presentationStyle = UIModalPresentationStyle.fullScreen
+    var shouldScanText = false
 }
 
 public struct CameraResult {
@@ -102,6 +103,10 @@ internal struct ProcessedImage {
         exifData?["GPS"] = metadata["{GPS}"]
         return exifData ?? [:]
     }
+    
+    var recognizedText: String
+    
+    var recognizedTextConfidence: Float
 
     mutating func overwriteMetadataOrientation(to orientation: Int) {
         replaceDictionaryOrientation(atNode: &metadata, to: orientation)

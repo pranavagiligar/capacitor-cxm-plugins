@@ -1,5 +1,5 @@
 {
-  "name": "@capacitor/camera",
+  "name": "capacitor-camera-cxm",
   "version": "5.0.7",
   "description": "The Camera API provides the ability to take a photo with the camera or choose an existing one from the photo album.",
   "main": "dist/plugin.cjs.js",
@@ -11,13 +11,13 @@
     "android/build.gradle",
     "dist/",
     "ios/Plugin/",
-    "CapacitorCamera.podspec"
+    "CapacitorCameraCxm.podspec"
   ],
   "author": "Ionic <hi@ionicframework.com>",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ionic-team/capacitor-plugins.git"
+    "url": "git+https://github.com/OracleCXM/capacitor-plugins-cxm.git"
   },
   "bugs": {
     "url": "https://github.com/ionic-team/capacitor-plugins/issues"
@@ -76,7 +76,6 @@
       "src": "android"
     }
   },
-  "publishConfig": {
-    "access": "public"
-  }
+  "homepage": "https://github.com/OracleCXM/capacitor-plugins-cxm#readme",
+  "dependencies": {}
 }

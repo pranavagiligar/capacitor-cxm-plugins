@@ -18,9 +18,11 @@ import android.os.Environment;
 import android.os.Parcelable;
 import android.provider.MediaStore;
 import android.util.Base64;
+
 import androidx.activity.result.ActivityResult;
 import androidx.annotation.NonNull;
 import androidx.core.content.FileProvider;
+
 import com.getcapacitor.FileUtils;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -33,6 +35,17 @@ import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
+import com.google.android.gms.tasks.OnFailureListener;
+import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.android.gms.tasks.Task;
+import com.google.mlkit.vision.common.InputImage;
+import com.google.mlkit.vision.text.Text;
+import com.google.mlkit.vision.text.TextRecognition;
+import com.google.mlkit.vision.text.TextRecognizer;
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
+
+import org.json.JSONException;
+
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -47,7 +60,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
-import org.json.JSONException;
 
 /**
  * The Camera plugin makes it easy to take a photo or have the user select a photo
@@ -294,6 +306,7 @@ public class CameraPlugin extends Plugin {
         settings.setHeight(call.getInt("height", 0));
         settings.setShouldResize(settings.getWidth() > 0 || settings.getHeight() > 0);
         settings.setShouldCorrectOrientation(call.getBoolean("correctOrientation", CameraSettings.DEFAULT_CORRECT_ORIENTATION));
+        settings.setShouldScanText(call.getBoolean("shouldScanText", false));
         try {
             settings.setSource(CameraSource.valueOf(call.getString("source", CameraSource.PROMPT.getSource())));
         } catch (IllegalArgumentException ex) {
@@ -418,6 +431,15 @@ public class CameraPlugin extends Plugin {
                             } else {
                                 photos.put(processResult);
                             }
+                        }
+                    } else if (data.getData() != null) {
+                        Uri imageUri = data.getData();
+                        JSObject processResult = processPickedImages(imageUri);
+                        if (processResult.getString("error") != null && !processResult.getString("error").isEmpty()) {
+                            call.reject(processResult.getString("error"));
+                            return;
+                        } else {
+                            photos.put(processResult);
                         }
                     } else if (data.getData() != null) {
                         Uri imageUri = data.getData();
@@ -689,6 +711,8 @@ public class CameraPlugin extends Plugin {
 
         if (settings.getResultType() == CameraResultType.BASE64) {
             returnBase64(call, exif, bitmapOutputStream);
+        } else if (settings.getResultType() == CameraResultType.URI && settings.isShouldScanText()) {
+            returnRecognizedText(call, exif, bitmap, u, bitmapOutputStream);
         } else if (settings.getResultType() == CameraResultType.URI) {
             returnFileURI(call, exif, bitmap, u, bitmapOutputStream);
         } else if (settings.getResultType() == CameraResultType.DATAURL) {
@@ -726,6 +750,65 @@ public class CameraPlugin extends Plugin {
             ret.put("webPath", FileUtils.getPortablePath(getContext(), bridge.getLocalUrl(), newUri));
             ret.put("saved", isSaved);
             call.resolve(ret);
+        } else {
+            call.reject(UNABLE_TO_PROCESS_IMAGE);
+        }
+    }
+
+    private String getRecognizedText(Text visionText) {
+        List<Text.TextBlock> blocks = visionText.getTextBlocks();
+           if (blocks.size() == 0) {
+               return "";
+           }
+
+           String recognizedTextString = "";
+
+           for (int i = 0; i < blocks.size(); i++) {
+               List<Text.Line> lines = blocks.get(i).getLines();
+               String line = "";
+               for (int j = 0; j < lines.size(); j++) {
+                   List<Text.Element> elements = lines.get(j).getElements();
+                   for (int k = 0; k < elements.size(); k++) {
+                       line = line + " " + elements.get(k).getText();
+                   }
+                   line = line + System.lineSeparator();
+               }
+               recognizedTextString += line;
+           }
+       return recognizedTextString;
+   }
+
+    private void returnRecognizedText(PluginCall call, ExifWrapper exif, Bitmap bitmap, Uri u, ByteArrayOutputStream bitmapOutputStream) {
+        Uri newUri = getTempImage(u, bitmapOutputStream);
+        exif.copyExif(newUri.getPath());
+
+        if (newUri != null) {
+            JSObject ret = new JSObject();
+            TextRecognizer recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
+             InputImage image = InputImage.fromBitmap(bitmap, 0);
+
+            Task<Text> result =
+                    recognizer.process(image)
+                            .addOnSuccessListener(new OnSuccessListener<Text>() {
+                                @Override
+                                public void onSuccess(Text visionText) {
+                                    ret.put("recognizedText", getRecognizedText(visionText));
+                                    ret.put("format", "jpeg");
+                                    ret.put("exif", exif.toJson());
+                                    ret.put("path", newUri.toString());
+                                    ret.put("webPath", FileUtils.getPortablePath(getContext(), bridge.getLocalUrl(), newUri));
+                                    ret.put("saved", isSaved);
+                                    call.resolve(ret);
+                                }
+                            })
+                            .addOnFailureListener(
+                                    new OnFailureListener() {
+                                        @Override
+                                        public void onFailure(@NonNull Exception e) {
+                                            Logger.error("something went wrong with MLKIT text recognition", UNABLE_TO_PROCESS_IMAGE, e);
+                                            call.reject(UNABLE_TO_PROCESS_IMAGE);
+                                        }
+                                    });
         } else {
             call.reject(UNABLE_TO_PROCESS_IMAGE);
         }

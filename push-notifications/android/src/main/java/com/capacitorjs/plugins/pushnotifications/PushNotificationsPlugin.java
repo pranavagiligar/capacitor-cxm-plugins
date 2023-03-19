@@ -40,7 +40,11 @@ public class PushNotificationsPlugin extends Plugin {
     private static final String EVENT_TOKEN_CHANGE = "registration";
     private static final String EVENT_TOKEN_ERROR = "registrationError";
 
+    private static boolean gForeground = false;
+    private static Intent pendingNotification;
+
     public void load() {
+        gForeground = true;
         notificationManager = (NotificationManager) getActivity().getSystemService(Context.NOTIFICATION_SERVICE);
         firebaseMessagingService = new MessagingService();
 
@@ -51,13 +55,17 @@ public class PushNotificationsPlugin extends Plugin {
         }
 
         notificationChannelManager = new NotificationChannelManager(getActivity(), notificationManager, getConfig());
+        if (pendingNotification != null) {
+            this.handleOnNewIntent(pendingNotification);
+            pendingNotification = null;
+        }
     }
 
     @Override
     protected void handleOnNewIntent(Intent data) {
         super.handleOnNewIntent(data);
         Bundle bundle = data.getExtras();
-        if (bundle != null && bundle.containsKey("google.message_id")) {
+        if (bundle != null) {
             JSObject notificationJson = new JSObject();
             JSObject dataObject = new JSObject();
             for (String key : bundle.keySet()) {
@@ -316,6 +324,36 @@ public class PushNotificationsPlugin extends Plugin {
         return null;
     }
 
+    public static boolean isActive() {
+        return (staticBridge != null && staticBridge.getWebView() != null);
+    }
+
+    public static boolean isInForeground() {
+        return gForeground;
+    }
+
+    @Override
+    public void handleOnResume() {
+        super.handleOnResume();
+        gForeground = true;
+    }
+
+    @Override
+    public void handleOnPause() {
+        super.handleOnPause();
+        gForeground = false;
+    }
+
+
+    @Override
+    public void handleOnDestroy() {
+        super.handleOnDestroy();
+        gForeground = false;
+    }
+
+    public static void storePendingNotification(Intent notification) {
+        pendingNotification = notification;
+    }
     @PermissionCallback
     private void permissionsCallback(PluginCall call) {
         this.checkPermissions(call);
