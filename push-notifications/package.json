@@ -1,6 +1,6 @@
 {
-  "name": "capacitor-push-notifications-cxm",
-  "version": "5.0.6",
+  "name": "capacitor-push-notifications-oj-cxm",
+  "version": "5.0.0-alpha.2",
   "description": "The Push Notifications API provides access to native push notifications. Forked to include code from phonegap-plugin-push so that background notifications can automatically be shown if they contain a message.",
   "main": "dist/plugin.cjs.js",
   "module": "dist/esm/index.js",
@@ -11,7 +11,7 @@
     "android/build.gradle",
     "dist/",
     "ios/Plugin/",
-    "CapacitorPushNotificationsCxm.podspec"
+    "CapacitorPushNotificationsOjCxm.podspec"
   ],
   "author": "Ionic <hi@ionicframework.com>",
   "license": "MIT",
