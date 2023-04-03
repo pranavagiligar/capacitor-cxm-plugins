@@ -11,7 +11,7 @@
     "android/build.gradle",
     "dist/",
     "ios/Plugin/",
-    "CapacitorCameraCxm.podspec"
+    "CapacitorCameraOjCxm.podspec"
   ],
   "author": "Ionic <hi@ionicframework.com>",
   "license": "MIT",
